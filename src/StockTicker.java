@@ -24,6 +24,8 @@ public class StockTicker {
    static private SimpleDateFormat ft;
    static private long time_offset = 0;
 
+   static private String db_name = "DB_CHICAGO";
+
   //private static HashMap<Integer, Transaction> recentTransaction;
   private static int idCounter;
 
@@ -34,11 +36,32 @@ public class StockTicker {
     CreateStockData();
     initTIME();
     System.out.println("Now is: " + ft.format(ctime));
-    syscTime(ft.parse("2016-01-01 08:00:00"));
+    double pr;
+
+    pr = getPrice("ACCOR");
+    System.out.println("ACCOR PRICE: " + Double.toString(pr));
+    System.out.println("buy ACCOR 100 :" + buyStocks("ACCOR", 100).message);
+    System.out.println("buy ACCOR 100 :" + buyStocks("ACCOR", 100).message);
+    syscTime(ft.parse("2016-01-01 10:00:01"));
+    pr = getPrice("ACCOR");
+    System.out.println("ACCOR PRICE: " + Double.toString(pr));
+    syscTime(ft.parse("2016-01-01 11:00:01"));
+    pr = getPrice("ACCOR");
+    System.out.println("ACCOR PRICE: " + Double.toString(pr));
 
     databaseTest();
 
-    syscStockIssue(ft.parse("2016-01-01 9:00:00"));
+    System.out.println("123 : " + Integer.toString(hasStock("123")));
+    System.out.println("ACCOR : " + Integer.toString(hasStock("ACCOR")));
+
+    System.out.println("buy ACCOR 100 :" + buyStocks("ACCOR", 100).message);
+    System.out.println("buy ACCOR 100 :" + buyStocks("ACCOR", 100).message);
+    System.out.println("sell ACCOR 100 :" + sellStocks("ACCOR", 100).message);
+    System.out.println("buy ACCOR 100 :" + buyStocks("ACCOR", 100).message);
+    System.out.println("buy ACCOR 300 :" + buyStocks("ACCOR", 300).message);
+    System.out.println("sell ACCOR 300 :" + sellStocks("ACCOR", 300).message);
+    System.out.println("buy ACCOR 300 :" + buyStocks("ACCOR", 300).message);
+
   }
 
   private static void databaseTest() throws SQLException{
@@ -51,11 +74,80 @@ public class StockTicker {
     rs.close();
   }
 
-  public static void buyStocks(){
-    
+  private static double getPrice(String stock) throws ParseException,SQLException{
+    java.util.Date sys_time = new java.util.Date();
+    System.out.println("actualTime : " + ft.format(sys_time));
+    java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
+    System.out.println("marketTIME : " + ft.format(market_time));
+
+    String sql = "SELECT PRICE FROM PRICE WHERE COMPANY LIKE \"" + stock + "\" AND DATE <= \"";
+    sql = sql + ft.format(market_time) + "\" ORDER BY DATE DESC LIMIT 1";
+    ResultSet rs = stmt.executeQuery(sql);
+    rs.next();
+    return rs.getDouble("PRICE");
   }
 
-  public static void syscTime(java.util.Date time){
+  public static int hasStock(String stock) throws ParseException, SQLException{
+    java.util.Date sys_time = new java.util.Date();
+    System.out.println("actualTime : " + ft.format(sys_time));
+    java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
+    System.out.println("marketTIME : " + ft.format(market_time));
+
+    syscTime(market_time);
+    String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
+    ResultSet rs = stmt.executeQuery(sql);
+
+    if(rs.next()){
+      return rs.getInt("AMOUNT");
+    }
+    else{
+      return 0;
+    }
+  }
+
+  public static Return buyStocks(String stock, int amount) throws ParseException,SQLException{
+    int new_amount;
+
+    String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
+    ResultSet rs = stmt.executeQuery(sql);
+    rs.next();
+    new_amount = rs.getInt("AMOUNT") - amount;
+    rs.close();
+
+    if(new_amount < 0){
+      return new Return("not enough stocks", false);
+    }
+    else
+    {
+      sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(new_amount) + " WHERE STOCK LIKE \"" + stock + "\"";
+      stmt.executeUpdate(sql);
+      double pr = getPrice(stock);
+      return new Return("Price : " + Double.toString(pr), true);
+    }
+  }
+
+  public static Return sellStocks(String stock, int amount) throws ParseException, SQLException{
+    int new_amount;
+
+    String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
+    ResultSet rs = stmt.executeQuery(sql);
+    rs.next();
+    new_amount = rs.getInt("AMOUNT") + amount;
+    rs.close();
+
+    //sell always accept
+    sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(new_amount) + " WHERE STOCK LIKE \"" + stock + "\"";
+    stmt.executeUpdate(sql);
+
+    double pr = getPrice(stock);
+    return new Return("Price : " + Double.toString(pr), true);
+  }
+
+  public static Return issueStocks(String stock, int amount) throws ParseException,SQLException{
+    return sellStocks(stock, amount);
+  }
+
+  public static void syscTime(java.util.Date time) throws ParseException,SQLException{
     java.util.Date sys_time = new java.util.Date();
     System.out.println("syscTime   : " + ft.format(time));
     System.out.println("actualTime : " + ft.format(sys_time));
@@ -103,7 +195,7 @@ public class StockTicker {
 
     //get current amount of stocks and issued stocks
     for(i = 0; i < num_stocks; i++){
-      sql = "SELECT * FROM STOCKS WHERE OWNER LIKE \"" + company_name[i] + "\"";
+      sql = "SELECT * FROM STOCKS WHERE STOCK LIKE \"" + company_name[i] + "\"";
       rs = stmt.executeQuery(sql);
       rs.next();
       current_stock[i] = rs.getInt("amount");
@@ -120,7 +212,7 @@ public class StockTicker {
     //update stocks
     for(i = 0; i < num_stocks; i++){
       int newValue = current_stock[i] + issue_stock[i];
-      sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(newValue) + " WHERE OWNER LIKE \"" + company_name[i] + "\"";
+      sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(newValue) + " WHERE STOCK LIKE \"" + company_name[i] + "\"";
       System.out.println(sql);
       stmt.executeUpdate(sql);
     }
@@ -131,14 +223,14 @@ public class StockTicker {
   private static void CreateStockData(){
     try
     {
-        String sql = "USE PROJECTDB";
+        String sql = "USE " + db_name;
         stmt.executeUpdate(sql);
 
         sql = "DROP TABLE IF EXISTS STOCKS";
         stmt.executeUpdate(sql);
 
         sql = "CREATE TABLE STOCKS (" +
-              "stock VARCHAR(100), amount INTEGER, owner VARCHAR(100) )";
+              "stock VARCHAR(100), amount INTEGER)";
         stmt.executeUpdate(sql);
 
         String fi_time = "2016-01-01 8:00:00";
@@ -169,7 +261,7 @@ public class StockTicker {
         for(i = 0; i < num_stocks; i++){
           System.out.println(company_name[i] + " :" + Integer.toString(amount[i]));
           sql = "INSERT INTO STOCKS " +
-                "VALUES (\"" + company_name[i] + "\", " + Integer.toString(amount[i]) + ",\"" + company_name[i] +"\")";
+                "VALUES (\"" + company_name[i] + "\", " + Integer.toString(amount[i]) + ")";
           stmt.executeUpdate(sql);
         }
 
@@ -187,7 +279,7 @@ public class StockTicker {
 
     try
     {
-        String sql = "USE PROJECTDB";
+        String sql = "USE " + db_name;
         stmt.executeUpdate(sql);
 
         sql = "DROP TABLE IF EXISTS PRICE";
@@ -282,7 +374,7 @@ public class StockTicker {
   private static void LoadQTY_CSVData(String filename){
     try
     {
-        String sql = "USE PROJECTDB";
+        String sql = "USE " + db_name;
         stmt.executeUpdate(sql);
 
         sql = "DROP TABLE IF EXISTS QUANTITY";
@@ -354,10 +446,10 @@ public class StockTicker {
         System.out.println("Creating database...");
         stmt = conn.createStatement();
 
-        String sql = "DROP DATABASE IF EXISTS PROJECTDB";
+        String sql = "DROP DATABASE IF EXISTS " + db_name;
         stmt.executeUpdate(sql);
 
-        sql = "CREATE DATABASE PROJECTDB";
+        sql = "CREATE DATABASE " + db_name;
         stmt.executeUpdate(sql);
 
         System.out.println("Database created successfully...");
