@@ -16,7 +16,7 @@ import org.jgroups.util.RspList;
 
 public class Continent {
     private String name;
-    private Map<String, Address> stockTable; // key: stock, value: address of market
+    private Map<String, AbsAddress> stockTable; // key: stock, value: address of market
     private JChannel rChannel; // root channel, cluster of continents
     private JChannel cChannel; // continent channel, cluster of markets
     private RpcDispatcher rDisp; // root dispatcher, listening on root channel
@@ -36,10 +36,10 @@ public class Continent {
     }
 
     @SuppressWarnings("unused")
-    public Address localMarketLookUp(String stockName) throws Exception {
+    public AbsAddress localStockLookUp(String stockName) throws Exception {
         // check self
         if (stockTable.containsKey(stockName)) {
-            return stockTable.get(stockName);
+            return this.stockTable.get(stockName);
         }
         // ask this continent
         MethodCall hasStock = new MethodCall("hasStock", new Object[]{}, new Class[]{});
@@ -48,28 +48,28 @@ public class Continent {
             if (entry.getValue() == null)
                 continue;
             if (entry.getValue().equals(true)) {
-                Address addr = entry.getKey();
-                this.stockTable.put(stockName, addr);
-                return addr;
+                AbsAddress absAddress = new AbsAddress(this.name, entry.getKey());
+                this.stockTable.put(stockName, absAddress);
+                return absAddress;
             }
         }
         return null;
     }
 
     @SuppressWarnings("unused")
-    public Address marketLookUp(String stockName) throws Exception {
+    public AbsAddress marketLookUp(String stockName) throws Exception {
 
-        Address addr = this.localMarketLookUp(stockName);
-        if (addr != null)
-            return addr;
+        AbsAddress absAddress = this.localStockLookUp(stockName);
+        if (absAddress != null)
+            return absAddress;
         // ask other continents
-        MethodCall localMarketLookUp = new MethodCall("localMarketLookUp", new Object[]{stockName}, new Class[]{String.class});
-        RspList<Address> rRspList = Util.callOthersMethods(this.rDisp, localMarketLookUp, this.rDispOptions);
-        addr = rRspList.getFirst();
-        if (addr != null) {
-            this.stockTable.put(stockName, addr);
+        MethodCall localStockLookUp = new MethodCall("localStockLookUp", new Object[]{stockName}, new Class[]{String.class});
+        RspList<AbsAddress> rRspList = Util.callOthersMethods(this.rDisp, localStockLookUp, this.rDispOptions);
+        absAddress = rRspList.getFirst();
+        if (absAddress != null) {
+            this.stockTable.put(stockName, absAddress);
         }
-        return addr;
+        return absAddress;
     }
 
     public void syncTime(Date date) throws Exception {
