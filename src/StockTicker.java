@@ -76,15 +76,20 @@ public class StockTicker {
 
   private static double getPrice(String stock) throws ParseException,SQLException{
     java.util.Date sys_time = new java.util.Date();
-    System.out.println("actualTime : " + ft.format(sys_time));
+    System.out.println("getPrice -- actualTime : " + ft.format(sys_time));
     java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
-    System.out.println("marketTIME : " + ft.format(market_time));
+    System.out.println("getPrice -- marketTIME : " + ft.format(market_time));
 
     String sql = "SELECT PRICE FROM PRICE WHERE COMPANY LIKE \"" + stock + "\" AND DATE <= \"";
     sql = sql + ft.format(market_time) + "\" ORDER BY DATE DESC LIMIT 1";
     ResultSet rs = stmt.executeQuery(sql);
-    rs.next();
-    return rs.getDouble("PRICE");
+    if(rs.next())
+    {
+      return rs.getDouble("PRICE");
+    }
+    else{
+      return -1.0;    //did not find the price
+    }
   }
 
   public static int hasStock(String stock) throws ParseException, SQLException{
@@ -159,10 +164,11 @@ public class StockTicker {
     issue_time = time;
   }
 
-  private static void initTIME() throws ParseException{
+  private static void initTIME() throws SQLException,ParseException{
     ft = new SimpleDateFormat ("yyyy-MM-dd hh:mm:ss");
     ctime = ft.parse("2016-01-01 08:00:00");
     issue_time = ctime;
+    syscTime(ctime);
   }
 
   private static void syscStockIssue(java.util.Date now) throws ParseException, SQLException{
