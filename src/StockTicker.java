@@ -19,54 +19,116 @@ public class StockTicker {
    static Statement stmt = null;
    static PreparedStatement pstmt = null;
 
-   static private int current_time;
+   static private java.util.Date issue_time;
    static private java.util.Date ctime;
+   static private SimpleDateFormat ft;
+   static private long time_offset = 0;
 
   //private static HashMap<Integer, Transaction> recentTransaction;
   private static int idCounter;
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws ParseException, SQLException {
     DatabaseInit();
     LoadQTY_CSVData("qty_stocks.csv");
-    //LoadPRICE_CSVData("price_stocks.csv");
+    LoadPRICE_CSVData("price_stocks.csv");
     CreateStockData();
+    initTIME();
+    System.out.println("Now is: " + ft.format(ctime));
+    syscTime(ft.parse("2016-01-01 08:00:00"));
 
-    ctime = new java.util.Date();
-    SimpleDateFormat ft = new SimpleDateFormat ("yyyy-MM-dd hh:mm:ss");
-    try
-    {
-      ctime = ft.parse("2016-01-01 08:00:00");
+    databaseTest();
+
+    syscStockIssue(ft.parse("2016-01-01 9:00:00"));
+  }
+
+  private static void databaseTest() throws SQLException{
+    String sql = "SELECT SUM(QTY) AS DIFF FROM QUANTITY WHERE STOCK LIKE " +
+          "\"ACCOR\" AND DATE > \"2016-01-01 08:00:00\" AND DATE < \"2016-01-01 08:00:00\"";
+    ResultSet rs = stmt.executeQuery(sql);
+    rs.next();
+    int diff = rs.getInt("diff");
+    System.out.println(Integer.toString(diff));
+    rs.close();
+  }
+
+  public static void buyStocks(){
+    
+  }
+
+  public static void syscTime(java.util.Date time){
+    java.util.Date sys_time = new java.util.Date();
+    System.out.println("syscTime   : " + ft.format(time));
+    System.out.println("actualTime : " + ft.format(sys_time));
+    time_offset = time.getTime() - sys_time.getTime();
+    System.out.println(time_offset);
+
+    //sysc stock issue
+    syscStockIssue(time);
+    issue_time = time;
+  }
+
+  private static void initTIME() throws ParseException{
+    ft = new SimpleDateFormat ("yyyy-MM-dd hh:mm:ss");
+    ctime = ft.parse("2016-01-01 08:00:00");
+    issue_time = ctime;
+  }
+
+  private static void syscStockIssue(java.util.Date now) throws ParseException, SQLException{
+    String start = ft.format(issue_time);
+    String end = ft.format(now);
+
+    String fi_time = "2016-01-01 8:00:00";
+
+    //get company name
+    String sql = "SELECT COUNT(*) AS NUM FROM QUANTITY WHERE DATE = \"" + fi_time + "\"";
+    ResultSet rs = stmt.executeQuery(sql);
+    rs.next();
+    int num_stocks = rs.getInt("NUM");
+    System.out.println(Integer.toString(num_stocks));
+    rs.close();
+
+    String[] company_name = new String[num_stocks];
+    int[] current_stock = new int[num_stocks];      //already issued STOCKS
+    int[] issue_stock = new int[num_stocks];        //need to be issued at this time
+
+    sql = "SELECT * FROM QUANTITY WHERE DATE = \"" + fi_time + "\"";
+    rs = stmt.executeQuery(sql);
+
+    int i = 0;
+    while(rs.next()){
+      company_name[i] = rs.getString("stock");
+      i++;
     }
-    catch (ParseException e){
-      System.err.print("parse error");
+    rs.close();
+
+    //get current amount of stocks and issued stocks
+    for(i = 0; i < num_stocks; i++){
+      sql = "SELECT * FROM STOCKS WHERE OWNER LIKE \"" + company_name[i] + "\"";
+      rs = stmt.executeQuery(sql);
+      rs.next();
+      current_stock[i] = rs.getInt("amount");
+      rs.close();
+
+      sql = "SELECT SUM(QTY) AS DIFF FROM QUANTITY WHERE STOCK LIKE \"" + company_name[i] + "\" AND " +
+            "DATE > \"" + start + "\" AND DATE <= \"" + end + "\"";
+      rs = stmt.executeQuery(sql);
+      rs.next();
+      issue_stock[i] = rs.getInt("diff");
+      rs.close();
     }
-    String nowtime = ft.format(ctime);
-    System.out.println(nowtime);
+
+    //update stocks
+    for(i = 0; i < num_stocks; i++){
+      int newValue = current_stock[i] + issue_stock[i];
+      sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(newValue) + " WHERE OWNER LIKE \"" + company_name[i] + "\"";
+      System.out.println(sql);
+      stmt.executeUpdate(sql);
+    }
+
+
   }
 
-  public void syscTime(java.util.Date time){
-    this.ctime = time;
-  }
-
-  // public Transaction createTransaction(Holder seller, Holder buer){
-  //
-  // }
-
-  public void print(){
-    System.out.println(Integer.toString(idCounter));
-  }
-
-  // public Transaction getTransaction(int tid){
-  //   if(recentTransaction.containsKey(tid)){
-  //     return recentTransaction.get(tid);
-  //   }
-  //   else{
-  //     System.err.println("Transaction " + Integer.toString(tid) + " not found");
-  //     return null;
-  //   }
-  // }
-
-  public static void CreateStockData(){
+  private static void CreateStockData(){
     try
     {
         String sql = "USE PROJECTDB";
@@ -76,7 +138,7 @@ public class StockTicker {
         stmt.executeUpdate(sql);
 
         sql = "CREATE TABLE STOCKS (" +
-              "company VARCHAR(100), amount INTEGER )";
+              "stock VARCHAR(100), amount INTEGER, owner VARCHAR(100) )";
         stmt.executeUpdate(sql);
 
         String fi_time = "2016-01-01 8:00:00";
@@ -107,7 +169,7 @@ public class StockTicker {
         for(i = 0; i < num_stocks; i++){
           System.out.println(company_name[i] + " :" + Integer.toString(amount[i]));
           sql = "INSERT INTO STOCKS " +
-                "VALUES (\"" + company_name[i] + "\", " + Integer.toString(amount[i]) + ")";
+                "VALUES (\"" + company_name[i] + "\", " + Integer.toString(amount[i]) + ",\"" + company_name[i] +"\")";
           stmt.executeUpdate(sql);
         }
 
@@ -121,7 +183,7 @@ public class StockTicker {
   }
 
   // public Transaction getTransaction(){}
-  public static void LoadPRICE_CSVData(String filename){
+  private static void LoadPRICE_CSVData(String filename){
 
     try
     {
@@ -217,7 +279,7 @@ public class StockTicker {
   }
 
 
-  public static void LoadQTY_CSVData(String filename){
+  private static void LoadQTY_CSVData(String filename){
     try
     {
         String sql = "USE PROJECTDB";
@@ -277,7 +339,7 @@ public class StockTicker {
   }
 
   //connect and create database
-  public static void DatabaseInit(){
+  private static void DatabaseInit(){
     conn = null;
     stmt = null;
      try{
