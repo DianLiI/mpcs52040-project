@@ -26,7 +26,7 @@ public class User {
         User user = new User();
         while(true) {
             String line=in.readLine().trim().toLowerCase();
-            String[] lst = line.split(" ");
+            String[] lst = line.split(",");
             if (lst[0].equals("register")) {
                 user.register(lst[1], lst[2], "investor");
                 user.investor = user.login(lst[1], lst[2]);
