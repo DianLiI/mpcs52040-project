@@ -3,6 +3,7 @@ import org.jgroups.blocks.MethodCall;
 import org.jgroups.blocks.RequestOptions;
 import org.jgroups.blocks.ResponseMode;
 import org.jgroups.blocks.RpcDispatcher;
+import org.jgroups.blocks.cs.Client;
 import org.jgroups.util.RspList;
 
 import java.io.BufferedReader;
@@ -13,6 +14,7 @@ import java.util.List;
  * Created by dianli on 5/14/16.
  */
 public class User {
+    String username;
     JChannel pChannel; // permanent channel, connected to registered market
     JChannel tChannel; // temporary channel, for cross-market exchanges
     RpcDispatcher pDisp;
@@ -23,17 +25,18 @@ public class User {
         BufferedReader in=new BufferedReader(new InputStreamReader(System.in));
         User user = new User();
         while(true) {
-            System.out.print(">>> "); System.out.flush();
             String line=in.readLine().trim().toLowerCase();
             String[] lst = line.split(" ");
             if (lst[0].equals("register")) {
                 user.register(lst[1], lst[2], "investor");
                 user.investor = user.login(lst[1], lst[2]);
-                System.out.println(user.investor);
+                user.username = lst[1];
             }else if (lst[0].equals("sell")) {
                 user.sellStock(lst[1], Integer.parseInt(lst[2]));
             }else if (lst[0].equals("buy")) {
                 user.buyStock(lst[1], Integer.parseInt(lst[2]));
+            }else if (lst[0].equals("summary")){
+                user.summary();
             }
         }
     }
@@ -43,6 +46,16 @@ public class User {
         this.pChannel.connect("Europe");
         this.pDisp = new RpcDispatcher(this.pChannel, this);
         this.pDispOptions = new RequestOptions(ResponseMode.GET_ALL, 5000);
+    }
+
+    private void summary() {
+        System.out.println("Client: " + this.username);
+        System.out.println("=========== STOCK LISTED============");
+        for (String k : this.investor.stockTable.keySet()) {
+            System.out.println(k + " " + this.investor.stockTable.get(k));
+        }
+        System.out.println("=========== CASH FLOW===============");
+        System.out.println(this.investor.balance);
     }
     private void register(String username, String password, String type) throws Exception {
         MethodCall register = new MethodCall("register", new Object[]{username, password, type},

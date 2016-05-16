@@ -30,9 +30,9 @@ public class StockTicker {
     this.db_name = db_name;
 
     DatabaseInit();
-//    LoadQTY_CSVData("data/qty_stocks.csv");
-//    LoadPRICE_CSVData("data/price_stocks.csv");
-//    CreateStockData();
+    LoadQTY_CSVData("data/qty_stocks.csv");
+    LoadPRICE_CSVData("data/price_stocks.csv");
+    CreateStockData();
     initTIME();
     System.out.println("Start time: " + ft.format(ctime));
   }

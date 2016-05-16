@@ -153,7 +153,6 @@ public class Market {
             m = new Market("Euronext_Paris", "EURO", "Europe");
             BufferedReader in=new BufferedReader(new InputStreamReader(System.in));
             while(true) {
-                System.out.print(">>> "); System.out.flush();
                 String line=in.readLine().trim().toLowerCase();
                 if (line.equals("next hour")) {
                     m.stockTicker.time_offset += 3600000;
