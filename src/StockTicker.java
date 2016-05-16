@@ -7,37 +7,37 @@ import java.sql.*;
 public class StockTicker {
 
   // JDBC driver name and database URL
-   static final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
-   static final String DB_URL = "jdbc:mysql://localhost/";
+   final String JDBC_DRIVER = "com.mysql.jdbc.Driver";
+   final String DB_URL = "jdbc:mysql://localhost/";
 
    //  Database credentials
-   static final String USER = "root";
-   static final String PASS = "0";
+   final String USER = "root";
+   final String PASS = "0";
 
    // Database connection
-   static Connection conn = null;
-   static Statement stmt = null;
-   static PreparedStatement pstmt = null;
+   Connection conn = null;
+   Statement stmt = null;
+   PreparedStatement pstmt = null;
 
-   static private java.util.Date issue_time;
-   static private java.util.Date ctime;
-   static private SimpleDateFormat ft;
-   static private long time_offset = 0;
+   private java.util.Date issue_time;
+   private java.util.Date ctime;
+   private SimpleDateFormat ft;
+   public long time_offset = 0; // change to private later
 
-   static private String db_name = "DB_CHICAGO";
+   private String db_name = "DB_CHICAGO";
 
   public StockTicker(String db_name) throws ParseException, SQLException{
     this.db_name = db_name;
 
     DatabaseInit();
-    LoadQTY_CSVData("qty_stocks.csv");
-    LoadPRICE_CSVData("price_stocks.csv");
-    CreateStockData();
+//    LoadQTY_CSVData("data/qty_stocks.csv");
+//    LoadPRICE_CSVData("data/price_stocks.csv");
+//    CreateStockData();
     initTIME();
     System.out.println("Start time: " + ft.format(ctime));
   }
 
-  private static void databaseTest() throws SQLException{
+  private void databaseTest() throws SQLException{
     String sql = "SELECT SUM(QTY) AS DIFF FROM QUANTITY WHERE STOCK LIKE " +
           "\"ACCOR\" AND DATE > \"2016-01-01 08:00:00\" AND DATE < \"2016-01-01 08:00:00\"";
     ResultSet rs = stmt.executeQuery(sql);
@@ -47,7 +47,7 @@ public class StockTicker {
     rs.close();
   }
 
-  private static double getPrice(String stock) throws ParseException,SQLException{
+  public double getPrice(String stock) throws ParseException,SQLException{
     java.util.Date sys_time = new java.util.Date();
     java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
 
@@ -63,7 +63,7 @@ public class StockTicker {
     }
   }
 
-  public static int hasStock(String stock) throws ParseException, SQLException{
+  public int hasStock(String stock) throws ParseException, SQLException{
     java.util.Date sys_time = new java.util.Date();
     java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
     syscTime(market_time);
@@ -78,9 +78,8 @@ public class StockTicker {
     }
   }
 
-  public static Return buyStocks(String stock, int amount) throws ParseException,SQLException{
+  public Return buyStocks(String stock, int amount) throws ParseException,SQLException{
     int new_amount;
-
     String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
     ResultSet rs = stmt.executeQuery(sql);
     rs.next();
@@ -99,13 +98,14 @@ public class StockTicker {
     }
   }
 
-  public static Return sellStocks(String stock, int amount) throws ParseException, SQLException{
+  public double sellStocks(String stock, int amount) throws ParseException, SQLException{
     int new_amount;
 
     String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
     ResultSet rs = stmt.executeQuery(sql);
     rs.next();
     new_amount = rs.getInt("AMOUNT") + amount;
+      System.out.println(new_amount);
     rs.close();
 
     //sell always accept
@@ -113,14 +113,14 @@ public class StockTicker {
     stmt.executeUpdate(sql);
 
     double pr = getPrice(stock);
-    return new Return("Price : " + Double.toString(pr), true);
+    return pr;
   }
 
-  public static Return issueStocks(String stock, int amount) throws ParseException,SQLException{
+  public double issueStocks(String stock, int amount) throws ParseException,SQLException{
     return sellStocks(stock, amount);
   }
 
-  public static void syscTime(java.util.Date time) throws ParseException,SQLException{
+  public void syscTime(java.util.Date time) throws ParseException,SQLException{
     java.util.Date sys_time = new java.util.Date();
     time_offset = time.getTime() - sys_time.getTime();
 
@@ -129,14 +129,14 @@ public class StockTicker {
     issue_time = time;
   }
 
-  private static void initTIME() throws SQLException,ParseException{
+  private void initTIME() throws SQLException,ParseException{
     ft = new SimpleDateFormat ("yyyy-MM-dd hh:mm:ss");
     ctime = ft.parse("2016-01-01 08:00:00");
     issue_time = ctime;
     syscTime(ctime);
   }
 
-  private static void syscStockIssue(java.util.Date now) throws ParseException, SQLException{
+  private void syscStockIssue(java.util.Date now) throws ParseException, SQLException{
     String start = ft.format(issue_time);
     String end = ft.format(now);
 
@@ -190,7 +190,7 @@ public class StockTicker {
 
   }
 
-  private static void CreateStockData(){
+  private void CreateStockData(){
     try
     {
         String sql = "USE " + db_name;
@@ -243,7 +243,7 @@ public class StockTicker {
   }
 
   // public Transaction getTransaction(){}
-  private static void LoadPRICE_CSVData(String filename){
+  private void LoadPRICE_CSVData(String filename){
 
     try
     {
@@ -340,7 +340,7 @@ public class StockTicker {
   }
 
 
-  private static void LoadQTY_CSVData(String filename){
+  private void LoadQTY_CSVData(String filename){
     try
     {
         String sql = "USE " + db_name;
@@ -400,7 +400,7 @@ public class StockTicker {
   }
 
   //connect and create database
-  private static void DatabaseInit(){
+  private void DatabaseInit(){
     conn = null;
     stmt = null;
      try{
@@ -415,11 +415,12 @@ public class StockTicker {
         System.out.println("Creating database...");
         stmt = conn.createStatement();
 
-        String sql = "DROP DATABASE IF EXISTS " + db_name;
-        stmt.executeUpdate(sql);
+//        String sql = "DROP DATABASE IF EXISTS " + db_name;
+//        stmt.executeUpdate(sql);
 
-        sql = "CREATE DATABASE " + db_name;
+        String sql = "CREATE DATABASE IF NOT EXISTS " + db_name;
         stmt.executeUpdate(sql);
+         this.stmt.executeUpdate("USE " + db_name);
 
         System.out.println("Database created successfully...");
      }catch(SQLException se){

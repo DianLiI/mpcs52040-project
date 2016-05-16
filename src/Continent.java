@@ -57,7 +57,7 @@ public class Continent {
     }
 
     @SuppressWarnings("unused")
-    public AbsAddress marketLookUp(String stockName) throws Exception {
+    public AbsAddress stockLookUp(String stockName) throws Exception {
 
         AbsAddress absAddress = this.localStockLookUp(stockName);
         if (absAddress != null)
