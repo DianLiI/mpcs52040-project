@@ -25,9 +25,12 @@ public class StockTicker {
    public long time_offset = 0; // change to private later
 
    private String db_name = "DB_CHICAGO";
+   private String country_name = " ";
 
   public StockTicker(String db_name) throws ParseException, SQLException{
     this.db_name = db_name;
+    String[] parts = db_name.split("_");
+    this.country_name = parts[0];
 
     DatabaseInit();
     LoadQTY_CSVData("data/qty_stocks.csv");
@@ -303,13 +306,28 @@ public class StockTicker {
         System.out.println("Table created successfully...");
         System.out.print("Import price data......");
 
+        int icnt = 9;
         while(scanner.hasNextLine()){
             // System.out.print(scanner.nextLine()+"|||");
             String aLine = scanner.nextLine();
             String[] tokens = aLine.split("\\,");
+
+            // -----------------------------------
+            // this section for import information
+
+            if(icnt == 9)
+            {
+              System.out.println("Date : " + tokens[0]);
+              icnt = 0;
+            }
+            icnt++;
+
+            //this section for import information
+            // -----------------------------------
+
             for(int i = 3; i < tokens.length; i++){
               String company_name = parts5[i];
-              if(company_name.equals("ACCOR") || company_name.equals("AIR LIQUIDE") || company_name.equals("AIRBUS GROUP"))
+              if(country_name.equals(parts2[i]))
               // System.out.print(tokens[i] + "\t");
             {
               sql = "INSERT INTO PRICE " +
@@ -318,7 +336,7 @@ public class StockTicker {
               sql = sql + "\", " + tokens[i]; //
               sql = sql + ")";
 
-              // System.out.println("sql: " + sql);
+              //System.out.println("sql: " + sql);
               stmt.executeUpdate(sql);
             }
             }
