@@ -27,18 +27,81 @@ public class StockTicker {
    private String db_name = "DB_CHICAGO";
    private String country_name = " ";
 
+   private int trans_num;
+
   public StockTicker(String db_name) throws ParseException, SQLException{
     this.db_name = db_name;
     String[] parts = db_name.split("_");
     this.country_name = parts[0];
+    this.trans_num = 0;
 
     DatabaseInit();
+    createTransactiondb();
     LoadQTY_CSVData("data/qty_stocks.csv");
     LoadPRICE_CSVData("data/price_stocks.csv");
+
     CreateStockData();
     initTIME();
     System.out.println("Start time: " + ft.format(ctime));
   }
+
+  public int numofTransaction(){
+    return this.trans_num;
+  }
+
+  //return transaction with tid
+  public Transaction getTransaction(int tid) throws SQLException{
+    String sql = "SELECT * FROM TRANSACTION WHERE TID = " + Integer.toString(tid);
+    ResultSet rs = stmt.executeQuery(sql);
+    rs.next();
+
+    java.util.Date date = rs.getDate("DATE");
+    String holder = rs.getString("HOLDER");
+    String stock = rs.getString("STOCK");
+    int amount = rs.getInt("AMOUNT");
+    String type = rs.getString("TYPE");
+    boolean status = rs.getBoolean("STATUS");
+
+    Transaction returnT = new Transaction(date, tid, holder, stock, amount, type, status);
+    return returnT;
+  }
+
+  //record transaction into database
+  public void addTransaction(Transaction t) throws SQLException{
+
+    // "CREATE TABLE TRANSACTION(" +
+    //               "date DATETIME, " +
+    //               "tid INTEGER, " +
+    //               "holder VARCHAR(100), " +
+    //               "stock VARCHAR(100), " +
+    //               "amount INTEGER, " +
+    //               "type VARCHAR(10), " +
+    //               "status BOOLEAN)"
+
+    // "VALUES (STR_TO_DATE(\'" + tokens[0] + " " + tokens[1] +":00\', \'%m/%d/%Y %H:%i:%s\')";
+    String status = "TRUE";
+    if(t.status){
+      status = "TRUE";
+    }
+    else{
+      status = "FALSE";
+    }
+
+
+    String sql = "INSERT INTO TRANSACTION " +
+          "VALUES (" +
+            "STR_TO_DATE(\'" + ft.format(t.date) + "\', \'%Y-%m-%d %H:%i:%s\'), " +
+            Integer.toString(t.tid) + ", " +
+            "\'" + t.holder + "\', " +
+            "\'" + t.stock + "\', " +
+            Integer.toString(t.amount) + ", " +
+            "\'" + t.type + "\', " +
+            status + ")";
+    System.out.println(sql);
+    stmt.executeUpdate(sql);
+  }
+
+
 
   private void databaseTest() throws SQLException{
     String sql = "SELECT SUM(QTY) AS DIFF FROM QUANTITY WHERE STOCK LIKE " +
@@ -81,7 +144,7 @@ public class StockTicker {
     }
   }
 
-  public Return buyStocks(String stock, int amount) throws ParseException,SQLException{
+  public Return buyStocks(String holder, String stock, int amount) throws ParseException,SQLException{
     int new_amount;
     String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
     ResultSet rs = stmt.executeQuery(sql);
@@ -89,7 +152,14 @@ public class StockTicker {
     new_amount = rs.getInt("AMOUNT") - amount;
     rs.close();
 
+    java.util.Date sys_time = new java.util.Date();
+    java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
+    Transaction newT = new Transaction(market_time, this.trans_num, holder, stock, amount, "BUY", true);
+    this.trans_num++;
+
     if(new_amount < 0){
+      newT.status = false;
+      addTransaction(newT);
       return new Return("not enough stocks", false);
     }
     else
@@ -97,11 +167,12 @@ public class StockTicker {
       sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(new_amount) + " WHERE STOCK LIKE \"" + stock + "\"";
       stmt.executeUpdate(sql);
       double pr = getPrice(stock);
+      addTransaction(newT);
       return new Return("Price : " + Double.toString(pr), true);
     }
   }
 
-  public double sellStocks(String stock, int amount) throws ParseException, SQLException{
+  public double sellStocks(String holder, String stock, int amount) throws ParseException, SQLException{
     int new_amount;
 
     String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
@@ -111,16 +182,22 @@ public class StockTicker {
       System.out.println(new_amount);
     rs.close();
 
+    java.util.Date sys_time = new java.util.Date();
+    java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
+    Transaction newT = new Transaction(market_time, this.trans_num, holder, stock, amount, "SELL", true);
+    this.trans_num++;
+
     //sell always accept
     sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(new_amount) + " WHERE STOCK LIKE \"" + stock + "\"";
     stmt.executeUpdate(sql);
 
     double pr = getPrice(stock);
+    addTransaction(newT);
     return pr;
   }
 
   public double issueStocks(String stock, int amount) throws ParseException,SQLException{
-    return sellStocks(stock, amount);
+    return sellStocks(stock, stock, amount);
   }
 
   public void syscTime(java.util.Date time) throws ParseException,SQLException{
@@ -243,6 +320,28 @@ public class StockTicker {
          //Handle errors for Class.forName
          e.printStackTrace();
       }
+  }
+
+  private void createTransactiondb() throws SQLException{
+    String sql = "USE " + db_name;
+    stmt.executeUpdate(sql);
+
+    sql = "DROP TABLE IF EXISTS TRANSACTION";
+    stmt.executeUpdate(sql);
+
+    sql =  "CREATE TABLE TRANSACTION(" +
+                  "date DATETIME, " +
+                  "tid INTEGER, " +
+                  "holder VARCHAR(100), " +
+                  "stock VARCHAR(100), " +
+                  "amount INTEGER, " +
+                  "type VARCHAR(10), " +
+                  "status BOOLEAN)";
+
+    System.out.println("CreateTable sql : " + sql);
+
+    stmt.executeUpdate(sql);
+    System.out.println("Table created successfully...");
   }
 
   // public Transaction getTransaction(){}
