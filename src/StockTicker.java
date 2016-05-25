@@ -25,14 +25,14 @@ public class StockTicker {
    public long time_offset = 0; // change to private later
 
    private String db_name = "DB_CHICAGO";
-   private String country_name = " ";
+   private String market_name = " ";
 
    private int trans_num;
 
   public StockTicker(String db_name) throws ParseException, SQLException{
-    this.db_name = db_name;
+    this.db_name = "`" + db_name + "`";
     String[] parts = db_name.split("_");
-    this.country_name = parts[0];
+    this.market_name = "`" + parts[0] + "`";
     this.trans_num = 0;
 
     DatabaseInit();
@@ -372,6 +372,10 @@ public class StockTicker {
         //header3 - market
         String header3 = scanner.nextLine();
         String[] parts3 = header3.split("\\,");
+        for(int i = 0; i < parts3.length; i++){
+          parts3[i] = "`" + parts3[i] + "`";
+          // System.out.println(parts3[i]);
+        }
 
         //header 4 - company
         String header4 = scanner.nextLine();
@@ -403,7 +407,7 @@ public class StockTicker {
 
         stmt.executeUpdate(sql);
         System.out.println("Table created successfully...");
-        System.out.print("Import price data......");
+        System.out.println("Import price data......");
 
         int icnt = 9;
         while(scanner.hasNextLine()){
@@ -424,9 +428,10 @@ public class StockTicker {
             //this section for import information
             // -----------------------------------
 
+
             for(int i = 3; i < tokens.length; i++){
               String company_name = parts5[i];
-              if(country_name.equals(parts2[i]))
+              if(market_name.equals(parts3[i]))
               // System.out.print(tokens[i] + "\t");
             {
               sql = "INSERT INTO PRICE " +
@@ -472,12 +477,43 @@ public class StockTicker {
         //scanner.useDelimiter(",");
 
         //read header
-        String header = scanner.nextLine();
-        String[] parts = header.split("\\,");
+        //header1 - continent
+        String header1 = scanner.nextLine();
+        String[] parts1 = header1.split("\\,");
 
-        //parts[0] : Date
-        //parts[1] : Time
-        //parts[2] : Stock
+        //header2 - country
+        String header2 = scanner.nextLine();
+        String[] parts2 = header2.split("\\,");
+
+        //header3 - market
+        String header3 = scanner.nextLine();
+        String[] parts3 = header3.split("\\,");
+        for(int i = 0; i < parts3.length; i++){
+          parts3[i] = "`" + parts3[i] + "`";
+          // System.out.println(parts3[i]);
+        }
+
+        //header 4 - company
+        String header4 = scanner.nextLine();
+        String[] parts4 = header4.split("\\,");
+        String[] parts5 = new String[parts4.length];
+        for(int i = 0, j = 0; i < parts4.length; i++){
+          if(parts4[i].charAt(0) != '\"'){
+            parts5[j] = parts4[i];
+            j++;
+          }
+          else{
+            parts5[j] = parts4[i];
+            int len = parts4[i].length();
+            while(parts4[i].charAt(len - 1) != '\"'){
+              i++;
+              parts5[j] = parts5[j] + "," + parts4[i];
+              len = parts4[i].length();
+            }
+            parts5[j] = parts5[j].replace("\"","");
+            j++;
+          }
+        }
 
         sql =  "CREATE TABLE QUANTITY(" +
                       "date DATETIME, stock VARCHAR(100), qty INTEGER)";
@@ -493,14 +529,17 @@ public class StockTicker {
             String[] tokens = aLine.split("\\,");
             for(int i = 3; i < tokens.length; i++){
               // System.out.print(tokens[i] + "\t");
-              sql = "INSERT INTO QUANTITY " +
-                    "VALUES (STR_TO_DATE(\'" + tokens[0] + " " + tokens[1] +":00\', \'%m/%d/%Y %H:%i:%s\')";
-              sql = sql + ", \'" + parts[i];  //company name
-              sql = sql + "\', " + tokens[i]; //
-              sql = sql + ")";
+              if(market_name.equals(parts3[i]))
+              {
+                sql = "INSERT INTO QUANTITY " +
+                      "VALUES (STR_TO_DATE(\'" + tokens[0] + " " + tokens[1] +":00\', \'%m/%d/%Y %H:%i:%s\')";
+                sql = sql + ", \'" + parts5[i];  //company name
+                sql = sql + "\', " + tokens[i]; //
+                sql = sql + ")";
 
-              // System.out.println("sql: " + sql);
-              stmt.executeUpdate(sql);
+                // System.out.println("sql: " + sql);
+                stmt.executeUpdate(sql);
+              }
             }
         }
         scanner.close();
