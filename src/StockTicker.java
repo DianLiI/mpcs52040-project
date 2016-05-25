@@ -53,7 +53,9 @@ public class StockTicker {
   public Transaction getTransaction(int tid) throws SQLException{
     String sql = "SELECT * FROM TRANSACTION WHERE TID = " + Integer.toString(tid);
     ResultSet rs = stmt.executeQuery(sql);
-    rs.next();
+    if(!rs.next()){
+      return null;
+    }
 
     java.util.Date date = rs.getDate("DATE");
     String holder = rs.getString("HOLDER");
@@ -148,7 +150,11 @@ public class StockTicker {
     int new_amount;
     String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
     ResultSet rs = stmt.executeQuery(sql);
-    rs.next();
+    if(!rs.next()){
+      rs.close();
+      return new Return("Price : -1", false);
+    }
+
     new_amount = rs.getInt("AMOUNT") - amount;
     rs.close();
 
@@ -480,10 +486,12 @@ public class StockTicker {
         //header1 - continent
         String header1 = scanner.nextLine();
         String[] parts1 = header1.split("\\,");
+        System.out.println("header1 done" + parts1[3]);
 
         //header2 - country
         String header2 = scanner.nextLine();
         String[] parts2 = header2.split("\\,");
+        System.out.println("header2 done" + parts2[3]);
 
         //header3 - market
         String header3 = scanner.nextLine();
@@ -492,6 +500,7 @@ public class StockTicker {
           parts3[i] = "`" + parts3[i] + "`";
           // System.out.println(parts3[i]);
         }
+        System.out.println("header3 done" + parts3[3]);
 
         //header 4 - company
         String header4 = scanner.nextLine();
@@ -514,6 +523,10 @@ public class StockTicker {
             j++;
           }
         }
+        System.out.println("header4 done" + parts4[3]);
+        for(int i = 0; i < parts5.length; i++){
+          System.out.println(parts5[i]);
+        }
 
         sql =  "CREATE TABLE QUANTITY(" +
                       "date DATETIME, stock VARCHAR(100), qty INTEGER)";
@@ -528,8 +541,8 @@ public class StockTicker {
             String aLine = scanner.nextLine();
             String[] tokens = aLine.split("\\,");
             for(int i = 3; i < tokens.length; i++){
-              // System.out.print(tokens[i] + "\t");
-              if(market_name.equals(parts3[i]))
+              System.out.println(market_name + " " + parts3[i]);
+              if(market_name.equals(parts3[i]) && tokens[i].length() != 0)
               {
                 sql = "INSERT INTO QUANTITY " +
                       "VALUES (STR_TO_DATE(\'" + tokens[0] + " " + tokens[1] +":00\', \'%m/%d/%Y %H:%i:%s\')";
