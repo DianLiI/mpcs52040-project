@@ -11,8 +11,10 @@ import org.jgroups.blocks.MethodCall;
 import org.jgroups.blocks.RequestOptions;
 import org.jgroups.blocks.ResponseMode;
 import org.jgroups.blocks.RpcDispatcher;
+import org.jgroups.protocols.UDP;
 import org.jgroups.util.Rsp;
 import org.jgroups.util.RspList;
+import sun.applet.Main;
 
 public class Continent {
     private String name;
@@ -28,6 +30,10 @@ public class Continent {
         this.name = name;
         this.rChannel = new JChannel();
         this.cChannel = new JChannel();
+        this.cChannel.getProtocolStack().findProtocol(UDP.class).setValue("mcast_port", 45590);
+        this.rChannel.setDiscardOwnMessages(true);
+        this.cChannel.setDiscardOwnMessages(true);
+        this.rChannel.getProtocolStack().findProtocol(UDP.class).setValue("mcast_port", 45591);
         this.rChannel.connect("Root");
         this.cChannel.connect(name);
         this.rDisp = new RpcDispatcher(this.rChannel, this);
@@ -42,12 +48,12 @@ public class Continent {
             return this.stockTable.get(stockName);
         }
         // ask this continent
-        MethodCall hasStock = new MethodCall("hasStock", new Object[]{}, new Class[]{});
+        MethodCall hasStock = new MethodCall("hasStock", new Object[]{stockName}, new Class[]{String.class});
         RspList<Boolean> cRspList = Util.callOthersMethods(this.cDisp, hasStock, this.cDispOptions);
         for (Map.Entry<Address, Rsp<Boolean>> entry: cRspList.entrySet()) {
             if (entry.getValue() == null)
                 continue;
-            if (entry.getValue().equals(true)) {
+            if (entry.getValue().getValue().equals(true)) {
                 AbsAddress absAddress = new AbsAddress(this.name, entry.getKey());
                 this.stockTable.put(stockName, absAddress);
                 return absAddress;
@@ -75,5 +81,9 @@ public class Continent {
     public void syncTime(Date date) throws Exception {
         MethodCall syncTime = new MethodCall("syncTime", new Object[]{date}, new Class[]{Date.class});
         Util.callOthersMethods(this.cDisp, syncTime, this.cDispOptions);
+    }
+
+    public static void main(String[] argv) throws Exception {
+        Continent c = new Continent(argv[0]);
     }
 }

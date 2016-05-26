@@ -3,7 +3,7 @@ import java.net.*;
 import java.util.*;
 import java.text.*;
 
-public class Transaction{
+public class Transaction implements Serializable {
 
   Date date;
   int tid;

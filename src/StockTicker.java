@@ -1,9 +1,22 @@
+import net.sf.hajdbc.SimpleDatabaseClusterConfigurationFactory;
+import net.sf.hajdbc.SynchronizationStrategy;
+import net.sf.hajdbc.cache.eager.SharedEagerDatabaseMetaDataCacheFactory;
+import net.sf.hajdbc.dialect.mysql.MySQLDialectFactory;
+import net.sf.hajdbc.distributed.jgroups.JGroupsCommandDispatcherFactory;
+import net.sf.hajdbc.durability.fine.FineDurabilityFactory;
+import net.sf.hajdbc.sql.DriverDatabase;
+import net.sf.hajdbc.sql.DriverDatabaseClusterConfiguration;
+import net.sf.hajdbc.state.simple.SimpleStateManagerFactory;
+import net.sf.hajdbc.sync.DumpRestoreSynchronizationStrategy;
+import net.sf.hajdbc.sync.FastDifferentialSynchronizationStrategy;
+import net.sf.hajdbc.sync.FullSynchronizationStrategy;
+import net.sf.hajdbc.util.concurrent.cron.CronExpression;
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.text.*;
 import java.sql.*;
-
 public class StockTicker {
 
   // JDBC driver name and database URL
@@ -16,8 +29,8 @@ public class StockTicker {
 
    // Database connection
    Connection conn = null;
-   Statement stmt = null;
-   PreparedStatement pstmt = null;
+//   Statement stmt = null;
+//   PreparedStatement pstmt = null;
 
    private java.util.Date issue_time;
    private java.util.Date ctime;
@@ -25,20 +38,25 @@ public class StockTicker {
    public long time_offset = 0; // change to private later
 
    private String db_name = "DB_CHICAGO";
+    private String db_name_raw;
    private String market_name = " ";
+    private int max_iter = 90;
 
    private int trans_num;
 
-  public StockTicker(String db_name) throws ParseException, SQLException{
+    public StockTicker(String db_name, boolean load) throws ParseException, SQLException {
     this.db_name = "`" + db_name + "`";
+        this.db_name_raw = db_name;
     String[] parts = db_name.split("_");
     this.market_name = "`" + parts[0] + "`";
     this.trans_num = 0;
 
     DatabaseInit();
-    createTransactiondb();
-    LoadQTY_CSVData("data/qty_stocks.csv");
-    LoadPRICE_CSVData("data/price_stocks.csv");
+        if (load) {
+            createTransactiondb();
+            LoadQTY_CSVData("data/qty_stocks.csv");
+            LoadPRICE_CSVData("data/price_stocks.csv");
+        }
 
     CreateStockData();
     initTIME();
@@ -52,6 +70,7 @@ public class StockTicker {
   //return transaction with tid
   public Transaction getTransaction(int tid) throws SQLException{
     String sql = "SELECT * FROM TRANSACTION WHERE TID = " + Integer.toString(tid);
+      Statement stmt = conn.createStatement();
     ResultSet rs = stmt.executeQuery(sql);
     if(!rs.next()){
       return null;
@@ -65,6 +84,7 @@ public class StockTicker {
     boolean status = rs.getBoolean("STATUS");
 
     Transaction returnT = new Transaction(date, tid, holder, stock, amount, type, status);
+      stmt.close();
     return returnT;
   }
 
@@ -90,17 +110,19 @@ public class StockTicker {
     }
 
 
-    String sql = "INSERT INTO TRANSACTION " +
+      String sql = "INSERT INTO TRANSACTION (date, holder, stock, amount, type, status)" +
           "VALUES (" +
             "STR_TO_DATE(\'" + ft.format(t.date) + "\', \'%Y-%m-%d %H:%i:%s\'), " +
-            Integer.toString(t.tid) + ", " +
+//            Integer.toString(t.tid) + ", " +
             "\'" + t.holder + "\', " +
             "\'" + t.stock + "\', " +
             Integer.toString(t.amount) + ", " +
             "\'" + t.type + "\', " +
             status + ")";
-    System.out.println(sql);
+//    System.out.println(sql);
+      Statement stmt = conn.createStatement();
     stmt.executeUpdate(sql);
+      stmt.close();
   }
 
 
@@ -108,11 +130,13 @@ public class StockTicker {
   private void databaseTest() throws SQLException{
     String sql = "SELECT SUM(QTY) AS DIFF FROM QUANTITY WHERE STOCK LIKE " +
           "\"ACCOR\" AND DATE > \"2016-01-01 08:00:00\" AND DATE < \"2016-01-01 08:00:00\"";
+      Statement stmt = conn.createStatement();
     ResultSet rs = stmt.executeQuery(sql);
     rs.next();
     int diff = rs.getInt("diff");
     //System.out.println(Integer.toString(diff));
     rs.close();
+      stmt.close();
   }
 
   public double getPrice(String stock) throws ParseException,SQLException{
@@ -121,12 +145,17 @@ public class StockTicker {
 
     String sql = "SELECT PRICE FROM PRICE WHERE COMPANY LIKE \"" + stock + "\" AND DATE <= \"";
     sql = sql + ft.format(market_time) + "\" ORDER BY DATE DESC LIMIT 1";
+      Statement stmt = conn.createStatement();
     ResultSet rs = stmt.executeQuery(sql);
-    if(rs.next())
-    {
-      return rs.getDouble("PRICE");
+      if (rs.next()) {
+          ;
+          Double result = rs.getDouble("PRICE");
+          rs.close();
+          stmt.close();
+          return result;
     }
     else{
+          stmt.close();
       return -1.0;    //did not find the price
     }
   }
@@ -136,12 +165,18 @@ public class StockTicker {
     java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
     syscTime(market_time);
     String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
+      Statement stmt = conn.createStatement();
     ResultSet rs = stmt.executeQuery(sql);
 
     if(rs.next()){
-      return rs.getInt("AMOUNT");
+        int result = rs.getInt("AMOUNT");
+        rs.close();
+        stmt.close();
+        return result;
     }
     else{
+        rs.close();
+        stmt.close();
       return 0;
     }
   }
@@ -149,15 +184,16 @@ public class StockTicker {
   public Return buyStocks(String holder, String stock, int amount) throws ParseException,SQLException{
     int new_amount;
     String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
+      Statement stmt = conn.createStatement();
     ResultSet rs = stmt.executeQuery(sql);
     if(!rs.next()){
       rs.close();
+        stmt.close();
       return new Return("Price : -1", false);
     }
 
     new_amount = rs.getInt("AMOUNT") - amount;
     rs.close();
-
     java.util.Date sys_time = new java.util.Date();
     java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
     Transaction newT = new Transaction(market_time, this.trans_num, holder, stock, amount, "BUY", true);
@@ -166,6 +202,8 @@ public class StockTicker {
     if(new_amount < 0){
       newT.status = false;
       addTransaction(newT);
+
+        stmt.close();
       return new Return("not enough stocks", false);
     }
     else
@@ -174,31 +212,33 @@ public class StockTicker {
       stmt.executeUpdate(sql);
       double pr = getPrice(stock);
       addTransaction(newT);
-      return new Return("Price : " + Double.toString(pr), true);
+
+        stmt.close();
+        return new Return("Price : " + Double.toString(pr), true, pr);
     }
   }
 
   public double sellStocks(String holder, String stock, int amount) throws ParseException, SQLException{
-    int new_amount;
-
-    String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
-    ResultSet rs = stmt.executeQuery(sql);
-    rs.next();
-    new_amount = rs.getInt("AMOUNT") + amount;
-      System.out.println(new_amount);
-    rs.close();
+//    int new_amount;7500
+//
+//    String sql = "SELECT AMOUNT FROM STOCKS WHERE STOCK LIKE \"" + stock + "\"";
+      Statement stmt = conn.createStatement();
+//    ResultSet rs = stmt.executeQuery(sql);
+//    rs.next();
+//    new_amount = rs.getInt("AMOUNT") + amount;
+      //sell always accept
+      String sql = "UPDATE STOCKS SET AMOUNT = AMOUNT+" + Integer.toString(amount) + " WHERE STOCK LIKE \"" + stock + "\"";
+      stmt.executeUpdate(sql);
+//    rs.close();
 
     java.util.Date sys_time = new java.util.Date();
     java.util.Date market_time = new java.util.Date(sys_time.getTime() + time_offset);
     Transaction newT = new Transaction(market_time, this.trans_num, holder, stock, amount, "SELL", true);
     this.trans_num++;
 
-    //sell always accept
-    sql = "UPDATE STOCKS SET AMOUNT = " + Integer.toString(new_amount) + " WHERE STOCK LIKE \"" + stock + "\"";
-    stmt.executeUpdate(sql);
-
     double pr = getPrice(stock);
     addTransaction(newT);
+      stmt.close();
     return pr;
   }
 
@@ -230,6 +270,7 @@ public class StockTicker {
 
     //get company name
     String sql = "SELECT COUNT(*) AS NUM FROM QUANTITY WHERE DATE = \"" + fi_time + "\"";
+      Statement stmt = conn.createStatement();
     ResultSet rs = stmt.executeQuery(sql);
     rs.next();
     int num_stocks = rs.getInt("NUM");
@@ -273,16 +314,19 @@ public class StockTicker {
       stmt.executeUpdate(sql);
     }
 
+      stmt.close();
+
 
   }
 
   private void CreateStockData(){
     try
     {
-        String sql = "USE " + db_name;
-        stmt.executeUpdate(sql);
+//        String sql = "USE " + db_name;
+//        stmt.executeUpdate(sql);
 
-        sql = "DROP TABLE IF EXISTS STOCKS";
+        String sql = "DROP TABLE IF EXISTS STOCKS";
+        Statement stmt = conn.createStatement();
         stmt.executeUpdate(sql);
 
         sql = "CREATE TABLE STOCKS (" +
@@ -318,6 +362,7 @@ public class StockTicker {
                 "VALUES (\"" + company_name[i] + "\", " + Integer.toString(amount[i]) + ")";
           stmt.executeUpdate(sql);
         }
+        stmt.close();
 
       } catch(SQLException se){
          //Handle errors for JDBC
@@ -329,25 +374,27 @@ public class StockTicker {
   }
 
   private void createTransactiondb() throws SQLException{
-    String sql = "USE " + db_name;
-    stmt.executeUpdate(sql);
+//    String sql = "USE " + db_name;
+//    stmt.executeUpdate(sql);
 
-    sql = "DROP TABLE IF EXISTS TRANSACTION";
+      String sql = "DROP TABLE IF EXISTS TRANSACTION";
+      Statement stmt = conn.createStatement();
     stmt.executeUpdate(sql);
 
     sql =  "CREATE TABLE TRANSACTION(" +
                   "date DATETIME, " +
-                  "tid INTEGER, " +
+            "tid INTEGER AUTO_INCREMENT," +
                   "holder VARCHAR(100), " +
                   "stock VARCHAR(100), " +
                   "amount INTEGER, " +
                   "type VARCHAR(10), " +
-                  "status BOOLEAN)";
+            "status BOOLEAN, PRIMARY KEY (tid))";
 
     System.out.println("CreateTable sql : " + sql);
 
     stmt.executeUpdate(sql);
     System.out.println("Table created successfully...");
+      stmt.close();
   }
 
   // public Transaction getTransaction(){}
@@ -355,10 +402,11 @@ public class StockTicker {
 
     try
     {
-        String sql = "USE " + db_name;
-        stmt.executeUpdate(sql);
+//        String sql = "USE " + db_name;
+//        stmt.executeUpdate(sql);
 
-        sql = "DROP TABLE IF EXISTS PRICE";
+        String sql = "DROP TABLE IF EXISTS PRICE";
+        Statement stmt = conn.createStatement();
         stmt.executeUpdate(sql);
 
 
@@ -415,8 +463,9 @@ public class StockTicker {
         System.out.println("Table created successfully...");
         System.out.println("Import price data......");
 
+        int c = 0;
         int icnt = 9;
-        while(scanner.hasNextLine()){
+        while (scanner.hasNextLine() && c < this.max_iter) {
             // System.out.print(scanner.nextLine()+"|||");
             String aLine = scanner.nextLine();
             String[] tokens = aLine.split("\\,");
@@ -430,7 +479,7 @@ public class StockTicker {
               icnt = 0;
             }
             icnt++;
-
+            c++;
             //this section for import information
             // -----------------------------------
 
@@ -455,6 +504,7 @@ public class StockTicker {
         }
         System.out.println("Success");
         scanner.close();
+        stmt.close();
       } catch (FileNotFoundException e){
         System.err.println("cannot open file");
       } catch(SQLException se){
@@ -471,10 +521,11 @@ public class StockTicker {
   private void LoadQTY_CSVData(String filename){
     try
     {
-        String sql = "USE " + db_name;
-        stmt.executeUpdate(sql);
+//        String sql = "USE " + db_name;
+//        stmt.executeUpdate(sql);
 
-        sql = "DROP TABLE IF EXISTS QUANTITY";
+        String sql = "DROP TABLE IF EXISTS QUANTITY";
+        Statement stmt = conn.createStatement();
         stmt.executeUpdate(sql);
 
 
@@ -546,8 +597,8 @@ public class StockTicker {
               {
                 sql = "INSERT INTO QUANTITY " +
                       "VALUES (STR_TO_DATE(\'" + tokens[0] + " " + tokens[1] +":00\', \'%m/%d/%Y %H:%i:%s\')";
-                sql = sql + ", \'" + parts5[i];  //company name
-                sql = sql + "\', " + tokens[i]; //
+                  sql = sql + ", \"" + parts5[i];  //company name
+                  sql = sql + "\", " + tokens[i]; //
                 sql = sql + ")";
 
                 // System.out.println("sql: " + sql);
@@ -556,6 +607,7 @@ public class StockTicker {
             }
         }
         scanner.close();
+        stmt.close();
       } catch (FileNotFoundException e){
         System.err.println("cannot open file");
       } catch(SQLException se){
@@ -571,25 +623,79 @@ public class StockTicker {
   //connect and create database
   private void DatabaseInit(){
     conn = null;
-    stmt = null;
      try{
         //STEP 2: Register JDBC driver
         Class.forName("com.mysql.jdbc.Driver");
+         System.out.println("Creating database...");
+         conn = DriverManager.getConnection(DB_URL, USER, PASS);
+         Statement stmt = conn.createStatement();
+         List<DriverDatabase> lst = new ArrayList<>();
+         for (int i = 0; i < 5; i++) {
+             String name = this.db_name_raw + "_" + i;
+//             stmt.executeUpdate("DROP DATABASE IF EXISTS `" + name + "`");
+             stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS `" + name + "`");
+             DriverDatabase db = new DriverDatabase();
+             db.setId(name);
+             db.setLocation("jdbc:mysql://localhost:3306/" + name);
+             db.setUser("root");
+             db.setPassword("0");
+             lst.add(db);
+         }
+         stmt.close();
+         conn.close();
+//        DriverDatabase db1 = new DriverDatabase();
+//        db1.setId("db1");
+//        db1.setLocation("jdbc:mysql://localhost:3306/db1");
+//        db1.setUser("root");
+//        db1.setPassword("0");
+//
+//        DriverDatabase db2 = new DriverDatabase();
+//        db2.setId("db2");
+//        db2.setLocation("jdbc:mysql://localhost:3306/db2");
+//        db2.setUser("root");
+//        db2.setPassword("0");
 
+         // Define the cluster configuration itself
+         DriverDatabaseClusterConfiguration config = new DriverDatabaseClusterConfiguration();
+         // Specify the database composing this cluster
+         config.setDatabases(lst);
+         // Define the dialect
+         config.setDialectFactory(new MySQLDialectFactory());
+         // Don't cache any meta data
+         config.setDatabaseMetaDataCacheFactory(new SharedEagerDatabaseMetaDataCacheFactory());
+         // Use an in-memory state manager
+         config.setStateManagerFactory(new SimpleStateManagerFactory());
+         // Make the cluster distributable
+         config.setDispatcherFactory(new JGroupsCommandDispatcherFactory());
+         // Activate every minute
+         config.setAutoActivationExpression(new CronExpression("0 0/1 * 1/1 * ? *"));
+         // Strategy
+         config.setDurabilityFactory(new FineDurabilityFactory());
+         Map<String, SynchronizationStrategy> map = new Hashtable<>();
+         map.put("dump-restore", new DumpRestoreSynchronizationStrategy());
+         map.put("full", new FullSynchronizationStrategy());
+         map.put("diff", new FastDifferentialSynchronizationStrategy());
+         config.setSynchronizationStrategyMap(map);
+         config.setDefaultSynchronizationStrategy("full");
+         config.setFailureDetectionExpression(new CronExpression("0 0/1 * 1/1 * ? *"));
+
+         // Register the configuration with the HA-JDBC driver
+         net.sf.hajdbc.sql.Driver.setConfigurationFactory(this.db_name_raw, new SimpleDatabaseClusterConfigurationFactory<Driver, DriverDatabase>(config));
+         // Database cluster is now ready to be used!
+         conn = DriverManager.getConnection("jdbc:ha-jdbc:" + this.db_name_raw, "root", "0");
         //STEP 3: Open a connection
-        System.out.println("Connecting to database...");
-        conn = DriverManager.getConnection(DB_URL, USER, PASS);
+//        System.out.println("Connecting to database...");
+//        conn = DriverManager.getConnection(DB_URL, USER, PASS);
 
         //STEP 4: Execute a query
-        System.out.println("Creating database...");
-        stmt = conn.createStatement();
+//        stmt = conn.createStatement();
 
 //        String sql = "DROP DATABASE IF EXISTS " + db_name;
 //        stmt.executeUpdate(sql);
 
-        String sql = "CREATE DATABASE IF NOT EXISTS " + db_name;
-        stmt.executeUpdate(sql);
-         this.stmt.executeUpdate("USE " + db_name);
+//        String sql = "CREATE DATABASE IF NOT EXISTS " + db_name;
+//        stmt.executeUpdate(sql);
+//         this.stmt.executeUpdate("USE " + db_name);
 
         System.out.println("Database created successfully...");
      }catch(SQLException se){
